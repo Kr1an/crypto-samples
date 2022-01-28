@@ -1,0 +1,234 @@
+<html>
+<body>
+<div>Open Date:</div>
+<div id="open-date">hello</div>
+<script>
+//https://www.geeksforgeeks.org/how-to-generate-large-prime-numbers-for-rsa-algorithm/#:~:text=The%20setup%20of%20an%20RSA,2048%20bits%20to%204096%20bits.
+
+document.getElementById("open-date").innerText = new Date()
+
+
+first100Primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503, 509, 521, 523, 541]
+// first100Primes = genFirstPrimesBruteForce(100)
+
+genFirstPrimesBruteForce = cnt => {
+    primes = [2]
+    val = 3
+    while (true) {
+        tilNum = Math.ceil(Math.sqrt(val))
+        for (let i = 2; i <= tilNum; i+=1) {
+            // check if not prime
+            if (val%i === 0) {
+                // go to next val
+                break
+            }
+            // no dividers found
+            if (tilNum === i) {
+                // add to primes array
+                primes.push(val)
+                // enought primes found. Returning
+                if (primes.length >= cnt)
+                    return primes
+            }
+        }
+        val += 2
+    }
+}
+
+// MillerRabin
+isPrime = (_testVal, iterCnt=10) => {
+    let testVal = BigInt(_testVal)
+    let n = BigInt(_testVal)
+    if (n%2n === 0) {
+        // n is even
+        return false
+    }
+    let useSmallPrimesTest = false
+    if (useSmallPrimesTest) {
+        let first100PrimesAsBigInts = first100Primes.map(BigInt)
+        for (let smallPrime of first100PrimesAsBigInts.filter(x => x < n)) {
+            if (n%smallPrime === 0n) {
+                // n has prime as divider. Its not prime
+                return false
+            }
+        }
+    }
+    let s = 0n
+    let d = n-1n
+    while (d%2n === 0n) {
+        s += 1n
+        d = d/2n
+    }
+    let nBitCnt = n.toString(2).length
+    // each iteration make probability closer to 1, that n is prime
+    for (let i=0; i < iterCnt; i++) {
+        let randA = getBigRand(nBitCnt-10) + 42n
+        // if check Composition returns true, value is composite - not prime. return false
+        if (_checkComposition(randA, d, s, n))
+            return false
+    }
+    // if iterCnt iteration passed and no composition found, than n is probably prime. return true
+    return true
+}
+_checkComposition = (a, d, s, n) => {
+    let x = expMod(a, d, n)
+    if (x === 1n)
+        return false
+    for (let i=1n; i <= s; i += 1n) {
+        x2 = expMod(x, 2n**(s-i), n)
+        if (x2 === n-1n)
+            return false
+    }
+    return true
+}
+
+multiTrialGetRSAParams = (trialCnt, ...args) => {
+    for (let i = 0; i < trialCnt; i++) {
+        try {
+            return genRSAParams(...args)
+        } catch (e) {}
+    }
+    throw new Error('was not able to generate RSA Params with ' + trialCnt + ' trials')
+}
+genRSAParams = (bitSizeDiff) => {
+    let primeBitSizeAverage = Math.round(bitSizeDiff/2)
+    let primes = findPrimes(2, primeBitSizeAverage)
+    let [p, q] = primes
+    let e = findPrimes(1, bitSizeDiff - 20)[0]
+    let n = p*q
+    let phi = (p-1n)*(q-1n)
+    let [d, y, gcd] = findGCDAndBezoutsCoefMod(e, phi, n*n)
+    // run some tests to check correctness
+    if ((d*e)%phi !== 1n) throw new Error('(d*e)%phi !== 1')
+    let m = 42n
+    let encrypted = expMod(m, e, n)
+    if (encrypted === m) throw new Error('encrypted === m')
+    let decrypted = expMod(encrypted, d, n)
+    if (decrypted !== m) throw new Error('decrypted !== m')
+    return [n, e, d]
+}
+
+splitterStr = '9339'
+encode = (str, e, n) => {
+    let strAsNum = BigInt(str.split('').map(x => x.charCodeAt(0)).join(splitterStr))
+    let encoded = expMod(strAsNum, e, n)
+    return encoded
+}
+decode = (data, d, n) => {
+    let decoded = expMod(data, d, n)
+    let chars = (""+decoded).split(splitterStr).map(x => +x)
+    return String.fromCharCode(...chars)
+}
+ 
+getBigRand = _sBit => {
+    return BigInt("0b" + new Array(_sBit).fill(0).map(() => Math.round(Math.random())).join(''))
+}
+
+findGCDAndBezoutsCoefMod = (_a, _b, _mod) => {
+    kA = new Map()
+    kB = new Map()
+    a = BigInt(_a)
+    b = BigInt(_b)
+    mod = BigInt(_mod)
+    if (a < b) {
+        let r = findGCDAndBezoutsCoefMod(b, a, mod)
+        let result = [r[1], r[0], r[2]]
+        return result
+    }
+    qInit = a/b
+    rInit = a%b
+    kA.set(a, 1n)
+    kB.set(b, 1n)
+    kA.set(b, 0n)
+    kB.set(a, 0n)
+    kA.set(rInit, 1n)
+    kB.set(rInit, -1n*qInit)
+    gcd = _findBezoutsCoef(b, rInit, kA, kB, mod)
+    x = kA.get(gcd)
+    y = kB.get(gcd)
+    return [x, y, gcd]
+}
+_findBezoutsCoef = (a, b, kA = undefined, kB = undefined, mod) => {
+    q = a/b
+    r = a%b
+    if (r === 0n)
+        return b
+    newKAVal = (kA.get(a) - ((q*kA.get(b))%mod))%mod
+    newKBVal = (kB.get(a) - ((q*kB.get(b))%mod))%mod
+    kA.set(r, newKAVal)
+    kB.set(r, newKBVal)
+    return _findBezoutsCoef(b, r, kA, kB, mod)
+}
+
+expMod = (_base, _exp, _mod) => {
+    const base = BigInt(_base)
+    const exp = BigInt(_exp)
+    const mod = BigInt(_mod)
+    let result = 1n
+    const expReverse = exp.toString('2').split('')
+    for (let i = 0; i < expReverse.length; i++) {
+        const k = expReverse[i]
+        result = (result**2n)%mod
+        if (k === '1')
+            result = (result*base)%mod
+    }
+    return result
+}
+ 
+findPrimes = (cnt = 5, primeSizeBit = 1024) => {
+    primes = []
+    for (let i = 0;; i++) {
+        rand = getBigRand(primeSizeBit)
+        if (isPrime(rand)) {
+            primes.push(rand)
+        }
+        if (primes.length >= cnt)
+            break
+    }
+    return primes
+}
+
+numOfPrimesApprox = n => x => x / Math.log(x)
+
+test = _prime => {
+    prime = BigInt(_prime)
+    degreeOf2Cnt = 0n
+    reminder = 0n
+    while (true) {
+        if (prime === 1n) break
+        if (prime%2n !== 0n) {
+            prime -= 1n
+            reminder += 1n*2n**degreeOf2Cnt
+        }
+        prime /= 2n
+        degreeOf2Cnt += 1n
+    }
+    return [degreeOf2Cnt, reminder]
+}
+
+test2 = _prime => {
+    prime = BigInt(_prime)
+    degreesOf2s = []
+    num = prime
+    while (true) {
+        let [degreeOf2s, left] = test(num)
+        degreesOf2s.push(degreeOf2s)
+        if (left === 0n) break
+        if (degreeOf2s === 0n) break
+        num = left
+    }
+    return degreesOf2s
+}
+
+main = () => {
+    let [n, e, d] = multiTrialGetRSAParams(4, 1024)
+    let encoded = encode('hello world', e, n)
+    let decoded = decode(encoded, d, n)
+    console.log(decoded)
+}
+main()
+ 
+</script>
+</body>
+</html>
+
